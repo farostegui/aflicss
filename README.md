@@ -1,4 +1,4 @@
-# DOLIBARR ERP & CRM
+# AFLICSS ERP & CRM
 
 ![Downloads per day](https://img.shields.io/sourceforge/dw/dolibarr.svg)
 ![Build status](https://img.shields.io/travis/Dolibarr/dolibarr/develop.svg)
