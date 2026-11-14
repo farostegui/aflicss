@@ -208,7 +208,7 @@ class MenuManager
 						print '<span class="fas fa-home fa-fw paddingright" aria-hidden="true"></span>';
 					}
 
-					print $val['titre'];
+					print ucfirst($val['titre']);
 					print '</a>'."\n";
 
 					// Search submenu for this mainmenu entry
@@ -310,7 +310,7 @@ class MenuManager
 							}
 
 							// @phan-suppress-next-line PhanParamSuspiciousOrder
-							print str_pad('', $val2['level'] + 1);
+							print str_repeat(' ', ($val2['level'] + 1));
 							print '<li class="lilevel'.($val2['level'] + 1);
 							if ($val2['level'] == 0) {
 								print ' ui-btn-icon-right ui-btn'; // ui-btn to highlight on clic
@@ -327,6 +327,7 @@ class MenuManager
 									$lastlevel2[$val2['level']] = 'greyed';
 								}
 							} else {
+								print '<span'.($val2['enabled'] ? '' : ' class="vsmenudisabled"').'>';
 								if ($val2['enabled']) {	// Allowed
 									$lastlevel2[$val2['level']] = 'enabled';
 								} else {
@@ -336,13 +337,20 @@ class MenuManager
 
 							// Add font-awesome for level 0 and 1 (if $val2['level'] == 1, we are on level2, if $val2['level'] == 2, we are on level 3...)
 							if ($val2['level'] == 0 && !empty($val2['prefix'])) {
-								print $val2['prefix'];	// the picto must have class="pictofixedwidth paddingright"
+								$reg = array();
+								if (preg_match('/^(fa[rsb]? )?fa-/', $val2['prefix'], $reg)) {
+									print '<span class="'.(empty($reg[1]) ? 'fa ' : '').$val2['prefix'].' paddingright pictofixedwidth"></span>';
+								} else {
+									print $val2['prefix'];	// the picto must have class="pictofixedwidth paddingright"
+								}
 							} else {
 								print '<i class="fa fa-does-not-exists fa-fw paddingright pictofixedwidth"></i>';
 							}
 
 							if ($relurl2) {
 								print '</a>';
+							} else {
+								print '</span>';
 							}
 							print '</li>'."\n";
 						}
@@ -357,7 +365,7 @@ class MenuManager
 						print $val['prefix'];
 					}
 
-					print $val['titre'];
+					print ucfirst($val['titre']);
 					print '</span>';
 				}
 				print '</li>';
@@ -468,7 +476,7 @@ class MenuManager
 								print '<span class="vsmenu" title="'.dol_escape_htmltag($menu_array[$i]['titre']).'">';
 							}
 							if ($menu_array[$i]['url']) {
-								print $menu_array[$i]['titre'].'</a>';
+								print ucfirst($menu_array[$i]['titre']).'</a>';
 							} else {
 								print '</span>';
 							}

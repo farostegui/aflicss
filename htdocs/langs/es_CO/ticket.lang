@@ -1,7 +1,6 @@
 # Dolibarr language file - Source file is en_US - ticket
 Module56000Desc=Sistema de tickets para la gestión de solicitudes o problemas
 Permission56001=Ver entradas
-Permission56004=Gestionar tickets
 Permission56005=Ver tickets de todos los terceros (no efectivo para usuarios externos, siempre se limitará al tercero del que dependen)
 Permission56006=Billetes de exportación
 TicketDictType=Ticket - Tipos
@@ -67,8 +66,6 @@ NoTicketsFound=No se encontró ningún boleto
 NoUnreadTicketsFound=No se encontró ningún ticket no leído
 TicketViewAllTickets=Ver todas las entradas
 TicketStatByStatus=Entradas por estado
-ShowAsConversation=Mostrar como lista de conversaciones
-MessageListViewType=Mostrar como lista de tablas
 ConfirmMassTicketClosingSendEmail=Envía automáticamente correos electrónicos al cerrar tickets
 ConfirmMassTicketClosingSendEmailQuestion=¿Quieres avisar a terceros al cerrar estos tickets?
 TicketCard=Tarjeta de entrada
@@ -138,7 +135,6 @@ TicketNewEmailSubjectAdmin=Nuevo ticket creado - Ref %s (ID de ticket público %
 TicketNewEmailBodyAdmin=<p> El ticket se acaba de crear con ID # %s, ver información: </p>
 SeeThisTicketIntomanagementInterface=Ver ticket en la interfaz de gestión
 ErrorEmailOrTrackingInvalid=Valor incorrecto para el ID de seguimiento o el correo electrónico
-NewUser=Nuevo Usuario
 NbOfTickets=Numero de tickets
 TicketCloseEmailSubjectCustomer=Boleto cerrado
 TicketCloseEmailSubjectAdmin=Ticket cerrado - Réf %s (ID de ticket público %s)

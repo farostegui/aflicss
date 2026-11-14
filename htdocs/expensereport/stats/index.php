@@ -2,7 +2,7 @@
 /* Copyright (C) 2003-2006 Rodolphe Quiedeville <rodolphe@quiedeville.org>
  * Copyright (c) 2004-2012 Laurent Destailleur  <eldy@users.sourceforge.net>
  * Copyright (C) 2012      Marcos García        <marcosgdf@gmail.com>
- * Copyright (C) 2018-2024  Frédéric France     <frederic.france@free.fr>
+ * Copyright (C) 2018-2026  Frédéric France     <frederic.france@free.fr>
  * Copyright (C) 2024-2025	MDW					<mdeweerd@users.noreply.github.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -47,6 +47,7 @@ $HEIGHT = DolGraph::getDefaultGraphSizeForStats('height');
 $hookmanager->initHooks(array('expensereportstats', 'globalcard'));
 
 $mode = GETPOSTISSET("mode") ? GETPOST("mode", 'aZ09') : 'customer';
+$tabfamily = GETPOST('tabfamily', 'aZ09');	// 'expensereportstats' to show the tab with the custom reports tool
 $object_status = GETPOST('object_status', 'intcomma');
 
 $userid = GETPOSTINT('userid');
@@ -57,13 +58,11 @@ if ($socid < 0) {
 $id = GETPOSTINT('id');
 
 // Security check
-if ($user->socid > 0) {
+if ($user->isExternalUser()) {
 	$action = '';
-	$socid = $user->socid;
+	$socid = $user->isExternalUser();
 }
-if ($user->socid) {
-	$socid = $user->socid;
-}
+
 $result = restrictedArea($user, 'expensereport', $id, '');
 
 $parameters = array();
@@ -92,6 +91,40 @@ $dir = $conf->expensereport->dir_temp;
 llxHeader('', $title);
 
 print load_fiche_titre($title, '', 'trip');
+
+// The custom reports tool does not filter on the expense reports of the user and its subordinates, so it needs the permission to read all expense reports
+$showtabcustomreports = (!$user->isExternalUser() && ($user->hasRight('expensereport', 'readall') || $user->hasRight('expensereport', 'lire_tous')));
+
+$h = 0;
+$head = array();
+$head[$h][0] = DOL_URL_ROOT.'/expensereport/stats/index.php';
+$head[$h][1] = $langs->trans("ByMonthYear");
+$head[$h][2] = 'byyear';
+$h++;
+
+if ($showtabcustomreports) {
+	$head[$h][0] = DOL_URL_ROOT.'/expensereport/stats/index.php?tabfamily=expensereportstats';
+	$head[$h][1] = $langs->trans("Custom");
+	$head[$h][2] = 'customreports';
+	$h++;
+}
+
+complete_head_from_modules($conf, $langs, null, $head, $h, 'trip_stats');
+
+// Show the tab with the custom reports tool
+if ($showtabcustomreports && $tabfamily == 'expensereportstats') {
+	print dol_get_fiche_head($head, 'customreports', '', -1);
+
+	define('USE_CUSTOM_REPORT_AS_TAB', 1);
+	$customreportobjecttype = 'expensereport';
+	include DOL_DOCUMENT_ROOT.'/core/customreports.php';
+
+	print dol_get_fiche_end();
+
+	llxFooter();
+	$db->close();
+	exit;
+}
 
 dol_mkdir($dir);
 
@@ -222,15 +255,6 @@ if (!count($arrayyears)) {
 }
 
 
-$h = 0;
-$head = array();
-$head[$h][0] = DOL_URL_ROOT.'/expensereport/stats/index.php';
-$head[$h][1] = $langs->trans("ByMonthYear");
-$head[$h][2] = 'byyear';
-$h++;
-
-complete_head_from_modules($conf, $langs, null, $head, $h, 'trip_stats');
-
 print dol_get_fiche_head($head, 'byyear', '', -1);
 
 
@@ -238,7 +262,7 @@ print '<div class="fichecenter"><div class="fichethirdleft">';
 
 
 // Show filter box
-print '<form name="stats" method="POST" action="'.$_SERVER["PHP_SELF"].'">';
+print '<form name="stats" method="POST" action="'.dolBuildUrl($_SERVER["PHP_SELF"]).'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="mode" value="'.$mode.'">';
 
@@ -272,6 +296,7 @@ if (!in_array($year, $arrayyears)) {
 	$arrayyears[$year] = $year;
 }
 arsort($arrayyears);
+print img_picto('', 'calendar', 'class="pictofixedwidth"');
 print $form->selectarray('year', $arrayyears, $year, 0, 0, 0, '', 0, 0, 0, '', 'width75');
 print '</td></tr>';
 print '<tr><td class="center" colspan="2"><input type="submit" name="submit" class="button small" value="'.$langs->trans("Refresh").'"></td></tr>';

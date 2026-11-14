@@ -6,7 +6,7 @@
  * Copyright (C) 2015      Jean-François Ferry  <jfefe@aternatik.fr>
  * Copyright (C) 2020      Maxime DEMAREST      <maxime@indelog.fr>
  * Copyright (C) 2024-2025	MDW					<mdeweerd@users.noreply.github.com>
- * Copyright (C) 2024       Frédéric France         <frederic.france@free.fr>
+ * Copyright (C) 2024-2026  Frédéric France         <frederic.france@free.fr>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +30,13 @@
 
 // Load Dolibarr environment
 require '../../../main.inc.php';
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ * @var User $user
+ */
 require_once DOL_DOCUMENT_ROOT.'/core/class/dolgraph.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formcompany.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formother.class.php';
@@ -39,14 +46,6 @@ if (isModEnabled('category')) {
 	require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
 }
 
-/**
- * @var Conf $conf
- * @var DoliDB $db
- * @var HookManager $hookmanager
- * @var Translate $langs
- * @var User $user
- */
-
 $WIDTH = DolGraph::getDefaultGraphSizeForStats('width');
 $HEIGHT = DolGraph::getDefaultGraphSizeForStats('height');
 
@@ -54,6 +53,13 @@ $HEIGHT = DolGraph::getDefaultGraphSizeForStats('height');
 $langs->loadLangs(array('bills', 'companies', 'other'));
 
 $mode = GETPOST("mode") ? GETPOST("mode") : 'customer';
+$tabfamily = GETPOST('tabfamily', 'aZ09');	// 'invoicestats' or 'supplierinvoicestats' to show the tab with the custom reports tool
+// The custom reports tool does not keep the parameter mode, so the mode is defined by the tabfamily
+if ($tabfamily == 'supplierinvoicestats') {
+	$mode = 'supplier';
+} elseif ($tabfamily == 'invoicestats') {
+	$mode = 'customer';
+}
 
 $hookmanager->initHooks(array('invoicestats', 'globalcard'));
 
@@ -70,7 +76,8 @@ $categ_id = GETPOSTINT('categ_id');
 
 $userid = GETPOSTINT('userid');
 $socid = GETPOSTINT('socid');
-$select_categ_categ_id = GETPOST('select_categ_categ_id', 'array');
+$select_categ_categ_id = GETPOST('select_categ_categ_id', 'array:int');
+$select_categ_invoice_id=GETPOST('select_categ_invoice_id', 'array:int');
 // Security check
 if ($user->socid > 0) {
 	$action = '';
@@ -99,20 +106,92 @@ $form = new Form($db);
 $formcompany = new FormCompany($db);
 $formother = new FormOther($db);
 
-llxHeader();
 
 $picto = 'bill';
-$title = $langs->trans("BillsStatistics");
-$dir = $conf->facture->dir_temp;
+$title = $langs->trans("BillsCustomers");
+$dir = $conf->invoice->dir_temp;
 
 if ($mode == 'supplier') {
 	$picto = 'supplier_invoice';
-	$title = $langs->trans("BillsStatisticsSuppliers");
+	$title = $langs->trans("BillsSuppliers");
 	$dir = $conf->fournisseur->facture->dir_temp;
 }
 
+llxHeader('', $title);
 
-print load_fiche_titre($title, '', $picto);
+$page = 0;
+$param = '';
+$sortfield = '';
+$sortorder = '';
+$massactionbutton = '';
+$num = 0;
+$nbtotalofrecords = $langs->trans("Statistics");
+$limit = 0;
+
+$newcardbutton = '';
+if ($mode == 'supplier') {
+	$urlnew = DOL_URL_ROOT.'/fourn/facture/card.php?action=create';
+	if (!empty($socid)) {
+		$urlnew .= '&socid='.$socid;
+	}
+	$newcardbutton .= dolGetButtonTitle($langs->trans('ViewList'), '', 'fa fa-bars imgforviewmode', DOL_URL_ROOT.'/fourn/facture/list.php?mode=common', '', 1, array('morecss' => 'reposition'));
+	$newcardbutton .= dolGetButtonTitle($langs->trans('ViewKanban'), '', 'fa fa-th-list imgforviewmode', DOL_URL_ROOT.'/fourn/facture/list.php?mode=kanban', '', 1, array('morecss' => 'reposition'));
+	$newcardbutton .= dolGetButtonTitle($langs->trans('Statistics'), '', 'fa fa-chart-bar imgforviewmode', DOL_URL_ROOT.'/compta/facture/stats/index.php?mode=supplier', '', 2, array('morecss' => 'reposition'));
+	$newcardbutton .= dolGetButtonTitleSeparator();
+	$newcardbutton .= dolGetButtonTitle($langs->trans('NewBill'), '', 'fa fa-plus-circle', $urlnew, '', (int) ($user->hasRight('fournisseur', 'facture', 'creer') || $user->hasRight('supplier_invoice', 'creer')));
+} else {
+	$urlnew = DOL_URL_ROOT.'/compta/facture/card.php?action=create';
+	if (!empty($socid)) {
+		$urlnew .= '&socid='.$socid;
+	}
+	$newcardbutton .= dolGetButtonTitle($langs->trans('ViewList'), '', 'fa fa-bars imgforviewmode', DOL_URL_ROOT.'/compta/facture/list.php?mode=common', '', 1, array('morecss' => 'reposition'));
+	$newcardbutton .= dolGetButtonTitle($langs->trans('ViewKanban'), '', 'fa fa-th-list imgforviewmode', DOL_URL_ROOT.'/compta/facture/list.php?mode=kanban', '', 1, array('morecss' => 'reposition'));
+	$newcardbutton .= dolGetButtonTitle($langs->trans('Statistics'), '', 'fa fa-chart-bar imgforviewmode', DOL_URL_ROOT.'/compta/facture/stats/index.php', '', 2, array('morecss' => 'reposition'));
+	$newcardbutton .= dolGetButtonTitleSeparator();
+	$newcardbutton .= dolGetButtonTitle($langs->trans('NewBill'), '', 'fa fa-plus-circle', $urlnew, '', $user->hasRight('facture', 'creer'));
+}
+
+print_barre_liste($title, $page, $_SERVER["PHP_SELF"], $param, $sortfield, $sortorder, $massactionbutton, $num, $nbtotalofrecords, $picto, 0, $newcardbutton, '', $limit, 0, 0, 1);
+
+// The custom reports tool is not available to external users
+$showtabcustomreports = empty($user->socid);
+$tabfamilycustomreports = ($mode == 'supplier' ? 'supplierinvoicestats' : 'invoicestats');
+
+$h = 0;
+$head = array();
+$head[$h][0] = DOL_URL_ROOT.'/compta/facture/stats/index.php?mode='.urlencode($mode);
+$head[$h][1] = $langs->trans("ByMonthYear");
+$head[$h][2] = 'byyear';
+$h++;
+
+if ($showtabcustomreports) {
+	$head[$h][0] = DOL_URL_ROOT.'/compta/facture/stats/index.php?tabfamily='.$tabfamilycustomreports;
+	$head[$h][1] = $langs->trans("Custom");
+	$head[$h][2] = 'customreports';
+	$h++;
+}
+
+$type = 'invoice_stats';
+if ($mode == 'supplier') {
+	$type = 'supplier_invoice_stats';
+}
+
+complete_head_from_modules($conf, $langs, null, $head, $h, $type);
+
+// Show the tab with the custom reports tool
+if ($showtabcustomreports && $tabfamily == $tabfamilycustomreports) {
+	print dol_get_fiche_head($head, 'customreports', '', -1);
+
+	define('USE_CUSTOM_REPORT_AS_TAB', 1);
+	$customreportobjecttype = ($mode == 'supplier' ? 'supplier_invoice' : 'invoice');
+	include DOL_DOCUMENT_ROOT.'/core/customreports.php';
+
+	print dol_get_fiche_end();
+
+	llxFooter();
+	$db->close();
+	exit;
+}
 
 dol_mkdir($dir);
 
@@ -125,6 +204,10 @@ if ($mode == 'customer') {
 		$stats->from .= ' LEFT JOIN '.MAIN_DB_PREFIX.'categorie_societe as cat ON (f.fk_soc = cat.fk_soc)';
 		$stats->where .= ' AND cat.fk_categorie IN ('.$db->sanitize(implode(',', $select_categ_categ_id)).')';
 	}
+	if (is_array($select_categ_invoice_id) && !empty($select_categ_invoice_id)) {
+		$stats->from .= ' LEFT JOIN '.MAIN_DB_PREFIX.'categorie_invoice as cat ON (f.rowid = cat.fk_invoice)';
+		$stats->where .= ' AND cat.fk_categorie IN ('.$db->sanitize(implode(',', $select_categ_invoice_id)).')';
+	}
 }
 if ($mode == 'supplier') {
 	if ($object_status != '' && $object_status >= 0) {
@@ -133,6 +216,10 @@ if ($mode == 'supplier') {
 	if (is_array($select_categ_categ_id) && !empty($select_categ_categ_id)) {
 		$stats->from .= ' LEFT JOIN '.MAIN_DB_PREFIX.'categorie_fournisseur as cat ON (f.fk_soc = cat.fk_soc)';
 		$stats->where .= ' AND cat.fk_categorie IN ('.$db->sanitize(implode(',', $select_categ_categ_id)).')';
+	}
+	if (is_array($select_categ_invoice_id) && !empty($select_categ_invoice_id)) {
+		$stats->from .= ' LEFT JOIN '.MAIN_DB_PREFIX.'categorie_supplier_invoice as cat ON (f.rowid = cat.fk_supplier_invoice)';
+		$stats->where .= ' AND cat.fk_categorie IN ('.$db->sanitize(implode(',', $select_categ_invoice_id)).')';
 	}
 }
 
@@ -269,29 +356,13 @@ if (!count($arrayyears)) {
 }
 
 
-$h = 0;
-$head = array();
-$head[$h][0] = DOL_URL_ROOT.'/compta/facture/stats/index.php?mode='.urlencode($mode);
-$head[$h][1] = $langs->trans("ByMonthYear");
-$head[$h][2] = 'byyear';
-$h++;
-
-if ($mode == 'customer') {
-	$type = 'invoice_stats';
-}
-if ($mode == 'supplier') {
-	$type = 'supplier_invoice_stats';
-}
-
-complete_head_from_modules($conf, $langs, null, $head, $h, $type);
-
 print dol_get_fiche_head($head, 'byyear', '', -1);
 
 print '<div class="fichecenter"><div class="fichethirdleft">';
 
 
 // Show filter box
-print '<form name="stats" method="POST" action="'.$_SERVER["PHP_SELF"].'">';
+print '<form name="stats" method="POST" action="'.dolBuildUrl($_SERVER["PHP_SELF"]).'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="mode" value="'.$mode.'">';
 
@@ -339,6 +410,28 @@ if (isModEnabled('category')) {
 	print '</td></tr>';
 }
 
+
+// Category facture
+if (isModEnabled('category')) {
+	$cat_type = '';
+	$cat_label = '';
+	if ($mode == 'customer') {
+		$cat_type = Categorie::TYPE_INVOICE;
+		$cat_label = $langs->trans("Category").' '.lcfirst($langs->trans("BillsCustomers"));
+	}
+	if ($mode == 'supplier') {
+		$cat_type = Categorie::TYPE_SUPPLIER_INVOICE;
+		$cat_label = $langs->trans("Category").' '.lcfirst($langs->trans("BillsSuppliers"));
+	}
+	print '<tr><td>'.$cat_label.'</td><td>';
+	$cate_arbo = $form->select_all_categories($cat_type, '', 'parent', 0, 0, 1);
+	print img_picto('', 'category', 'class="pictofixedwidth"');
+	print $form->multiselectarray('select_categ_invoice_id', $cate_arbo, GETPOST('select_categ_invoice_id', 'array'), 0, 0, 'widthcentpercentminusx maxwidth300');
+	//print $formother->select_categories($cat_type, $categ_id, 'categ_id', true);
+	print '</td></tr>';
+}
+
+
 // User
 print '<tr><td>'.$langs->trans("CreatedBy").'</td><td>';
 print img_picto('', 'user', 'class="pictofixedwidth"');
@@ -364,6 +457,7 @@ if (!in_array($nowyear, $arrayyears)) {
 	$arrayyears[$nowyear] = $nowyear;
 }
 arsort($arrayyears);
+print img_picto('', 'calendar', 'class="pictofixedwidth"');
 print $form->selectarray('year', $arrayyears, $year, 0, 0, 0, '', 0, 0, 0, '', 'width75');
 print '</td></tr>';
 print '<tr><td class="center" colspan="2"><input type="submit" name="submit" class="button small" value="'.$langs->trans("Refresh").'"></td></tr>';
@@ -375,7 +469,7 @@ print '<div class="div-table-responsive-no-min">';
 print '<table class="noborder centpercent">';
 print '<tr class="liste_titre" height="24">';
 print '<td class="center">'.$langs->trans("Year").'</td>';
-print '<td class="right">'.$langs->trans("NumberOfBills").'</td>';
+print '<td class="right">'.$langs->trans("Number").'</td>';
 print '<td class="right">%</td>';
 print '<td class="right">'.$langs->trans("AmountTotal").'</td>';
 print '<td class="right">%</td>';
@@ -383,20 +477,29 @@ print '<td class="right">'.$langs->trans("AmountAverage").'</td>';
 print '<td class="right">%</td>';
 print '</tr>';
 
+// Lines after $MAXLINES are hidden and shown with the link "More..."
+$MAXLINES = 5;
+$nbline = 0;
+$cssline = '';
 $oldyear = 0;
 foreach ($data as $val) {
 	$year = (int) $val['year'];
 	while ($year && $oldyear > $year + 1) {	// If we have empty year
 		$oldyear--;
+		$nbline++;
+		$cssline = ($nbline > $MAXLINES ? ' hidden statsyearmorelines' : '');
 
-		print '<tr class="oddeven" height="24">';
+		print '<tr class="oddeven'.$cssline.'" height="24">';
 		print '<td align="center"><a href="'.$_SERVER["PHP_SELF"].'?year='.$oldyear.'&amp;mode='.$mode.($socid > 0 ? '&socid='.$socid : '').($userid > 0 ? '&userid='.$userid : '').'">'.$oldyear.'</a></td>';
+		// Empty year just after a year with records: delta is -100% (a decrease is green for suppliers)
+		$isyearbeforeval = ($oldyear == $year + 1);
+		$classnegative = ($mode == 'supplier' ? 'growthup' : 'growthdown');
 		print '<td class="right">0</td>';
-		print '<td class="right"></td>';
+		print '<td class="right opacitylow '.$classnegative.'">'.(($isyearbeforeval && $val['nb'] > 0) ? '-100%' : '').'</td>';
 		print '<td class="right amount">0</td>';
-		print '<td class="right"></td>';
+		print '<td class="right opacitylow '.$classnegative.'">'.(($isyearbeforeval && $val['total'] > 0) ? '-100%' : '').'</td>';
 		print '<td class="right amount">0</td>';
-		print '<td class="right"></td>';
+		print '<td class="right opacitylow '.$classnegative.'">'.(($isyearbeforeval && $val['avg'] > 0) ? '-100%' : '').'</td>';
 		print '</tr>';
 	}
 
@@ -410,16 +513,25 @@ foreach ($data as $val) {
 		$greenavg = (empty($val['avg_diff']) || $val['avg_diff'] >= 0);
 	}
 
-	print '<tr class="oddeven" height="24">';
+	$nbline++;
+	$cssline = ($nbline > $MAXLINES ? ' hidden statsyearmorelines' : '');
+
+	print '<tr class="oddeven'.$cssline.'" height="24">';
 	print '<td align="center"><a href="'.$_SERVER["PHP_SELF"].'?year='.$year.'&amp;mode='.$mode.($socid > 0 ? '&socid='.$socid : '').($userid > 0 ? '&userid='.$userid : '').'">'.$year.'</a></td>';
 	print '<td class="right">'.$val['nb'].'</td>';
-	print '<td class="right opacitylow" style="'.($greennb ? 'color: green;' : 'color: red;').'">'.(!empty($val['nb_diff']) && $val['nb_diff'] < 0 ? '' : '+').round(!empty($val['nb_diff']) ? $val['nb_diff'] : 0).'%</td>';
+	print '<td class="right opacitylow '.($greennb ? 'growthup' : 'growthdown').'">'.(isset($val['nb_diff']) ? ($val['nb_diff'] < 0 ? '' : '+').round($val['nb_diff']).'%' : '').'</td>';
 	print '<td class="right"><span class="amount">'.price(price2num($val['total'], 'MT'), 1).'</span></td>';
-	print '<td class="right opacitylow" style="'.($greentotal ? 'color: green;' : 'color: red;').'">'.(!empty($val['total_diff']) && $val['total_diff'] < 0 ? '' : '+').round(!empty($val['total_diff']) ? $val['total_diff'] : 0).'%</td>';
+	print '<td class="right opacitylow '.($greentotal ? 'growthup' : 'growthdown').'">'.(isset($val['total_diff']) ? ($val['total_diff'] < 0 ? '' : '+').round($val['total_diff']).'%' : '').'</td>';
 	print '<td class="right"><span class="amount">'.price(price2num($val['avg'], 'MT'), 1).'</span></td>';
-	print '<td class="right opacitylow" style="'.($greenavg ? 'color: green;' : 'color: red;').'">'.(!empty($val['avg_diff']) && $val['avg_diff'] < 0 ? '' : '+').round(!empty($val['avg_diff']) ? $val['avg_diff'] : 0).'%</td>';
+	print '<td class="right opacitylow '.($greenavg ? 'growthup' : 'growthdown').'">'.(isset($val['avg_diff']) ? ($val['avg_diff'] < 0 ? '' : '+').round($val['avg_diff']).'%' : '').'</td>';
 	print '</tr>';
 	$oldyear = $year;
+}
+
+if ($nbline > $MAXLINES) {
+	print '<tr class="liste_total"><td colspan="7" class="center">';
+	print '<a href="#" class="showmoreoptions" onclick="jQuery(\'.statsyearmorelines\').toggle(); jQuery(this).toggle(); return false;">'.img_picto('', 'chevron-down', 'class="paddingright"').$langs->trans("More").'...</a>';
+	print '</td></tr>';
 }
 
 print '</table>';
